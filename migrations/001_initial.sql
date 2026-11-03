@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS schema_versions(version INTEGER PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS tenants(id TEXT PRIMARY KEY,name TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),name TEXT NOT NULL,email TEXT NOT NULL UNIQUE,role TEXT NOT NULL CHECK(role IN ('requester','approver','viewer')));
+CREATE TABLE IF NOT EXISTS purchase_requests(id TEXT PRIMARY KEY,tenant_id TEXT NOT NULL REFERENCES tenants(id),title TEXT NOT NULL,supplier TEXT NOT NULL,category TEXT NOT NULL CHECK(category IN ('Software','Equipment','Services','Travel')),description TEXT NOT NULL,amount_minor INTEGER NOT NULL CHECK(amount_minor BETWEEN 1 AND 1000000000),status TEXT NOT NULL CHECK(status IN ('draft','pending','approved','rejected')),created_by TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,updated_at TEXT NOT NULL,version INTEGER NOT NULL CHECK(version>0));
+CREATE INDEX IF NOT EXISTS idx_requests_tenant_status_date ON purchase_requests(tenant_id,status,created_at DESC);
+CREATE TABLE IF NOT EXISTS audit_events(id TEXT PRIMARY KEY,request_id TEXT NOT NULL REFERENCES purchase_requests(id),tenant_id TEXT NOT NULL REFERENCES tenants(id),actor_id TEXT NOT NULL REFERENCES users(id),action TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_audit_request ON audit_events(tenant_id,request_id,created_at);
+CREATE TABLE IF NOT EXISTS sessions(digest TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),expires_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS login_attempts(subject TEXT PRIMARY KEY,attempts INTEGER NOT NULL,window_start INTEGER NOT NULL);
+INSERT OR IGNORE INTO schema_versions(version) VALUES(1);
