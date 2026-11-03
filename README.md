@@ -41,6 +41,8 @@ Browser checks: `npx playwright install chromium`, then `npm run test:e2e`. Play
 
 Build: `docker build -t procureflow .`. Run: `docker run --rm -p 3000:3000 --env-file .env.local -v procureflow-data:/app/data procureflow`. Container filesystem data belongs in `/app/data`; use the default relative database path. Docker execution is recorded separately in the validation document.
 
+The [Docker validation workflow](.github/workflows/docker.yml) builds the real production image, runs all eight browser checks against it, and verifies request/audit/session persistence after replacing the container while retaining the named volume. See the [successful Docker run](https://github.com/caglarhekimci/procureflow-next/actions/runs/41560601096). Native compiler tools are needed only in the builder stage.
+
 ## Boundaries
 
 This is a portfolio application with explicit demo identity. It does not send messages or place purchases. Use a managed identity provider, HTTPS, ingress throttling and an appropriate database/backup strategy before a public service launch. SQLite supports one application node here; PostgreSQL is a documented adapter extension, not an implemented second database. No cloud deployment was performed.
