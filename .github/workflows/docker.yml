@@ -1,0 +1,71 @@
+name: Docker validation
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      E2E_BASE_URL: http://127.0.0.1:3210
+      E2E_PASSWORD: local-e2e-password-2026
+      CONTAINER_NAME: procureflow-check-${{ github.run_id }}
+      VOLUME_NAME: procureflow-check-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Build production Docker image
+        run: docker build --tag procureflow:validation .
+      - name: Start as nonroot with a named data volume
+        run: |
+          docker run -d --name "$CONTAINER_NAME" -p 127.0.0.1:3210:3000 \
+            -e DEMO_MODE=true -e DEMO_PASSWORD="$E2E_PASSWORD" -e APP_ORIGIN="$E2E_BASE_URL" \
+            -v "$VOLUME_NAME:/app/data" procureflow:validation
+          test "$(docker inspect --format '{{.Config.User}}' "$CONTAINER_NAME")" = node
+      - name: Wait for the containerized application
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$E2E_BASE_URL/login" > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run browser suite against Docker
+        run: npm run test:e2e
+      - name: Prepare durable record and session
+        run: node scripts/docker-persistence.mjs prepare
+      - name: Replace container while preserving its named volume
+        run: |
+          docker rm --force "$CONTAINER_NAME"
+          docker run -d --name "$CONTAINER_NAME" -p 127.0.0.1:3210:3000 \
+            -e DEMO_MODE=true -e DEMO_PASSWORD="$E2E_PASSWORD" -e APP_ORIGIN="$E2E_BASE_URL" \
+            -v "$VOLUME_NAME:/app/data" procureflow:validation
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$E2E_BASE_URL/login" > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Verify persistence after container replacement
+        run: node scripts/docker-persistence.mjs verify
+      - name: Capture container diagnostics
+        if: always()
+        run: |
+          mkdir -p docker-evidence
+          docker logs "$CONTAINER_NAME" > docker-evidence/container.log 2>&1 || true
+          docker version > docker-evidence/docker-version.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: procureflow-docker-evidence
+          path: |
+            docker-evidence
+            playwright-report
+      - name: Remove this run's disposable container and volume
+        if: always()
+        run: |
+          docker rm --force "$CONTAINER_NAME" || true
+          docker volume rm "$VOLUME_NAME" || true

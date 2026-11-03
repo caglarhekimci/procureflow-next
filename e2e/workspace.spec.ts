@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { mkdir } from 'node:fs/promises';
 const password = process.env.E2E_PASSWORD ?? 'local-e2e-password-2026';
-const origin = 'http://127.0.0.1:3210';
+const origin = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3210';
 async function login(page: Page, email = 'ayse@atlas.demo') {
   await page.goto('/login');
   await page.getByLabel('Demo account').selectOption(email);
